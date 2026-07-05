@@ -5,6 +5,9 @@ export type CofreResetDocument = HydratedDocument<CofreReset>;
 
 @Schema({ timestamps: true })
 export class CofreReset {
+  @Prop({ required: true, index: true, default: 'shopping' })
+  unit: string;
+
   @Prop({ required: true, min: 0 })
   amount: number; // valor que estava no cofre no momento do reset
 

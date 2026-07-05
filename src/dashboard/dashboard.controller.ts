@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { IsDateString, IsOptional } from 'class-validator';
 import dayjs from 'dayjs';
 import { DashboardService } from './dashboard.service';
+import { CreateCofreDepositDto } from './dto/create-cofre-deposit.dto';
+import { normalizeUnit } from '../common/unit';
 
 class SummaryQueryDto {
   @IsOptional()
@@ -30,34 +32,55 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('summary')
-  getSummary(@Query() query: SummaryQueryDto) {
-    return this.dashboardService.getSummary(query.date);
+  getSummary(@Query() query: SummaryQueryDto, @Query('unit') unit?: string) {
+    return this.dashboardService.getSummary(normalizeUnit(unit), query.date);
   }
 
   @Get('overview')
-  getOverview(@Query() query: RangeQueryDto) {
+  getOverview(@Query() query: RangeQueryDto, @Query('unit') unit?: string) {
     const { start, end } = resolveRange(query);
-    return this.dashboardService.getOverview(start, end);
+    return this.dashboardService.getOverview(normalizeUnit(unit), start, end);
   }
 
   @Get('history')
-  getHistory(@Query() query: RangeQueryDto) {
+  getHistory(@Query() query: RangeQueryDto, @Query('unit') unit?: string) {
     const { start, end } = resolveRange(query);
-    return this.dashboardService.getHistory(start, end);
+    return this.dashboardService.getHistory(normalizeUnit(unit), start, end);
   }
 
   @Get('cofre')
-  getCofre() {
-    return this.dashboardService.getCofreBalance();
+  getCofre(@Query('unit') unit?: string) {
+    return this.dashboardService.getCofreBalance(normalizeUnit(unit));
   }
 
   @Get('cofre/resets')
-  getCofreResets(@Query() query: RangeQueryDto) {
-    return this.dashboardService.getCofreResets(query.start, query.end);
+  getCofreResets(@Query() query: RangeQueryDto, @Query('unit') unit?: string) {
+    return this.dashboardService.getCofreResets(
+      normalizeUnit(unit),
+      query.start,
+      query.end,
+    );
   }
 
   @Post('cofre/reset')
-  resetCofre() {
-    return this.dashboardService.resetCofre();
+  resetCofre(@Query('unit') unit?: string) {
+    return this.dashboardService.resetCofre(normalizeUnit(unit));
+  }
+
+  @Get('cofre/deposits')
+  getCofreDeposits(@Query() query: RangeQueryDto, @Query('unit') unit?: string) {
+    return this.dashboardService.getCofreDeposits(
+      normalizeUnit(unit),
+      query.start,
+      query.end,
+    );
+  }
+
+  @Post('cofre/deposits')
+  createCofreDeposit(
+    @Body() dto: CreateCofreDepositDto,
+    @Query('unit') unit?: string,
+  ) {
+    return this.dashboardService.createDeposit(dto, normalizeUnit(unit));
   }
 }

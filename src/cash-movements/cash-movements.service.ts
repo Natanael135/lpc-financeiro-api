@@ -15,6 +15,7 @@ export interface DateRange {
 }
 
 type CashMovementFilter = {
+  unit: string;
   type?: CashMovementType;
   category?: string;
   date?: string | { $gte?: string; $lte?: string };
@@ -27,8 +28,8 @@ export class CashMovementsService {
     private cashMovementModel: Model<CashMovementDocument>,
   ) {}
 
-  create(dto: CreateCashMovementDto) {
-    return this.cashMovementModel.create(dto);
+  create(dto: CreateCashMovementDto, unit: string) {
+    return this.cashMovementModel.create({ ...dto, unit });
   }
 
   private applyRange(filter: CashMovementFilter, range?: DateRange) {
@@ -41,8 +42,8 @@ export class CashMovementsService {
     return filter;
   }
 
-  async findFiltered(query: QueryCashMovementDto) {
-    const filter: CashMovementFilter = {};
+  async findFiltered(query: QueryCashMovementDto, unit: string) {
+    const filter: CashMovementFilter = { unit };
     if (query.type) filter.type = query.type;
     this.applyRange(filter, { start: query.start, end: query.end });
     const items = await this.cashMovementModel
@@ -55,9 +56,10 @@ export class CashMovementsService {
   /** Soma total de um tipo. Aceita data exata ou intervalo. */
   async sumByType(
     type: CashMovementType,
+    unit: string,
     range?: DateRange | string,
   ): Promise<number> {
-    const filter: CashMovementFilter = { type };
+    const filter: CashMovementFilter = { unit, type };
     if (typeof range === 'string') {
       filter.date = range;
     } else {
@@ -71,8 +73,12 @@ export class CashMovementsService {
   }
 
   /** Quebra por categoria (usado para sangrias por período). */
-  async breakdownByCategory(type: CashMovementType, range?: DateRange) {
-    const filter: CashMovementFilter = { type };
+  async breakdownByCategory(
+    type: CashMovementType,
+    unit: string,
+    range?: DateRange,
+  ) {
+    const filter: CashMovementFilter = { unit, type };
     this.applyRange(filter, range);
     const result = await this.cashMovementModel.aggregate<{
       _id: string;

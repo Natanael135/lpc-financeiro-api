@@ -2,18 +2,19 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CashMovementsService } from './cash-movements.service';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { QueryCashMovementDto } from './dto/query-cash-movement.dto';
+import { normalizeUnit } from '../common/unit';
 
 @Controller('cash-movements')
 export class CashMovementsController {
   constructor(private readonly cashMovementsService: CashMovementsService) {}
 
   @Post()
-  create(@Body() dto: CreateCashMovementDto) {
-    return this.cashMovementsService.create(dto);
+  create(@Body() dto: CreateCashMovementDto, @Query('unit') unit?: string) {
+    return this.cashMovementsService.create(dto, normalizeUnit(unit));
   }
 
   @Get()
-  findFiltered(@Query() query: QueryCashMovementDto) {
-    return this.cashMovementsService.findFiltered(query);
+  findFiltered(@Query() query: QueryCashMovementDto, @Query('unit') unit?: string) {
+    return this.cashMovementsService.findFiltered(query, normalizeUnit(unit));
   }
 }

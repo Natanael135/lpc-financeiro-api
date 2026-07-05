@@ -5,6 +5,11 @@ import dayjs from 'dayjs';
 import { RevenueService } from '../revenue/revenue.service';
 import { CashMovementsService } from '../cash-movements/cash-movements.service';
 import { CofreReset, CofreResetDocument } from './schemas/cofre-reset.schema';
+import {
+  CofreDeposit,
+  CofreDepositDocument,
+} from './schemas/cofre-deposit.schema';
+import { CreateCofreDepositDto } from './dto/create-cofre-deposit.dto';
 
 export interface Attachment {
   url: string;
@@ -36,27 +41,41 @@ export class DashboardService {
     private readonly cashMovementsService: CashMovementsService,
     @InjectModel(CofreReset.name)
     private cofreResetModel: Model<CofreResetDocument>,
+    @InjectModel(CofreDeposit.name)
+    private cofreDepositModel: Model<CofreDepositDocument>,
   ) {}
 
-  private async sumResets(): Promise<number> {
+  private async sumResets(unit: string): Promise<number> {
     const result = await this.cofreResetModel.aggregate([
+      { $match: { unit } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
     return result[0]?.total ?? 0;
   }
 
-  async getCofreBalance() {
-    const [retiradas, resets] = await Promise.all([
-      this.cashMovementsService.sumByType('retirada'),
-      this.sumResets(),
+  private async sumDeposits(unit: string): Promise<number> {
+    const result = await this.cofreDepositModel.aggregate([
+      { $match: { unit } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
-    return { balance: retiradas - resets };
+    return result[0]?.total ?? 0;
   }
 
-  async resetCofre() {
-    const { balance } = await this.getCofreBalance();
+  async getCofreBalance(unit: string) {
+    const [retiradas, deposits, resets] = await Promise.all([
+      this.cashMovementsService.sumByType('retirada', unit),
+      this.sumDeposits(unit),
+      this.sumResets(unit),
+    ]);
+    // Saldo = retiradas do caixa + aportes externos − esvaziamentos
+    return { balance: retiradas + deposits - resets };
+  }
+
+  async resetCofre(unit: string) {
+    const { balance } = await this.getCofreBalance(unit);
     if (balance > 0) {
       await this.cofreResetModel.create({
+        unit,
         amount: balance,
         date: dayjs().format('YYYY-MM-DD'),
       });
@@ -65,8 +84,10 @@ export class DashboardService {
   }
 
   /** Histórico de esvaziamentos do cofre no período. */
-  async getCofreResets(start?: string, end?: string) {
-    const filter: { date?: { $gte?: string; $lte?: string } } = {};
+  async getCofreResets(unit: string, start?: string, end?: string) {
+    const filter: { unit: string; date?: { $gte?: string; $lte?: string } } = {
+      unit,
+    };
     if (start || end) {
       filter.date = {};
       if (start) filter.date.$gte = start;
@@ -77,8 +98,29 @@ export class DashboardService {
     return { items, total };
   }
 
+  createDeposit(dto: CreateCofreDepositDto, unit: string) {
+    return this.cofreDepositModel.create({ ...dto, unit });
+  }
+
+  /** Aportes ao cofre no período. */
+  async getCofreDeposits(unit: string, start?: string, end?: string) {
+    const filter: { unit: string; date?: { $gte?: string; $lte?: string } } = {
+      unit,
+    };
+    if (start || end) {
+      filter.date = {};
+      if (start) filter.date.$gte = start;
+      if (end) filter.date.$lte = end;
+    }
+    const items = await this.cofreDepositModel
+      .find(filter)
+      .sort({ date: -1, createdAt: -1 });
+    const total = items.reduce((sum, d) => sum + d.amount, 0);
+    return { items, total };
+  }
+
   /** Resumo agregado do período: totais, série de faturamento e sangrias por categoria. */
-  async getOverview(start: string, end: string) {
+  async getOverview(unit: string, start: string, end: string) {
     const [
       revenueTotal,
       sangriaTotal,
@@ -87,12 +129,15 @@ export class DashboardService {
       sangriaByCategory,
       revenues,
     ] = await Promise.all([
-      this.revenueService.sumRange(start, end),
-      this.cashMovementsService.sumByType('sangria', { start, end }),
-      this.cashMovementsService.sumByType('retirada', { start, end }),
-      this.getCofreBalance(),
-      this.cashMovementsService.breakdownByCategory('sangria', { start, end }),
-      this.revenueService.listRange(start, end),
+      this.revenueService.sumRange(start, end, unit),
+      this.cashMovementsService.sumByType('sangria', unit, { start, end }),
+      this.cashMovementsService.sumByType('retirada', unit, { start, end }),
+      this.getCofreBalance(unit),
+      this.cashMovementsService.breakdownByCategory('sangria', unit, {
+        start,
+        end,
+      }),
+      this.revenueService.listRange(start, end, unit),
     ]);
 
     return {
@@ -107,10 +152,10 @@ export class DashboardService {
   }
 
   /** Histórico detalhado agrupado por dia (desc). */
-  async getHistory(start: string, end: string): Promise<HistoryDay[]> {
+  async getHistory(unit: string, start: string, end: string): Promise<HistoryDay[]> {
     const [revenues, movementsResult] = await Promise.all([
-      this.revenueService.listRange(start, end),
-      this.cashMovementsService.findFiltered({ start, end }),
+      this.revenueService.listRange(start, end, unit),
+      this.cashMovementsService.findFiltered({ start, end }, unit),
     ]);
 
     const days = new Map<string, HistoryDay>();
@@ -158,13 +203,13 @@ export class DashboardService {
     );
   }
 
-  async getSummary(date?: string) {
+  async getSummary(unit: string, date?: string) {
     const targetDate = date ?? dayjs().format('YYYY-MM-DD');
     const [revenue, sangriasTotal, retiradasTotal, cofre] = await Promise.all([
-      this.revenueService.findByDate(targetDate),
-      this.cashMovementsService.sumByType('sangria', targetDate),
-      this.cashMovementsService.sumByType('retirada', targetDate),
-      this.getCofreBalance(),
+      this.revenueService.findByDate(targetDate, unit),
+      this.cashMovementsService.sumByType('sangria', unit, targetDate),
+      this.cashMovementsService.sumByType('retirada', unit, targetDate),
+      this.getCofreBalance(unit),
     ]);
 
     return {

@@ -11,7 +11,11 @@ export interface Attachment {
 
 @Schema({ timestamps: true })
 export class Revenue {
-  @Prop({ required: true, unique: true })
+  // Unidade/estabelecimento (ex.: shopping, centro).
+  @Prop({ required: true, index: true, default: 'shopping' })
+  unit: string;
+
+  @Prop({ required: true })
   date: string; // YYYY-MM-DD
 
   @Prop({ required: true, min: 0 })
@@ -23,3 +27,5 @@ export class Revenue {
 }
 
 export const RevenueSchema = SchemaFactory.createForClass(Revenue);
+// Faturamento é único por (unidade, dia).
+RevenueSchema.index({ unit: 1, date: 1 }, { unique: true });

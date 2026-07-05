@@ -7,6 +7,9 @@ export type CashMovementDocument = HydratedDocument<CashMovement>;
 
 @Schema({ timestamps: true })
 export class CashMovement {
+  @Prop({ required: true, index: true, default: 'shopping' })
+  unit: string;
+
   @Prop({ required: true, enum: ['sangria', 'retirada'] })
   type: CashMovementType;
 
