@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import dayjs from 'dayjs';
 import { RevenueService } from './revenue.service';
 import { UpsertRevenueDto } from './dto/upsert-revenue.dto';
+import { UpdateRevenueDto } from './dto/update-revenue.dto';
 import { QueryRevenueDto } from './dto/query-revenue.dto';
 import { normalizeUnit } from '../common/unit';
 
@@ -22,5 +32,19 @@ export class RevenueController {
       query.end ?? today,
       normalizeUnit(unit),
     );
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateRevenueDto,
+    @Query('unit') unit?: string,
+  ) {
+    return this.revenueService.update(id, dto, normalizeUnit(unit));
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @Query('unit') unit?: string) {
+    return this.revenueService.remove(id, normalizeUnit(unit));
   }
 }

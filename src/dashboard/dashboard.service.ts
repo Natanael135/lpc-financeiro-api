@@ -18,6 +18,7 @@ export interface Attachment {
 }
 
 export interface HistoryEntry {
+  id: string;
   reason: string;
   category?: string;
   amount: number;
@@ -26,6 +27,7 @@ export interface HistoryEntry {
 
 export interface HistoryDay {
   date: string;
+  revenueId?: string;
   revenue: number;
   revenueAttachments: Attachment[];
   sangrias: HistoryEntry[];
@@ -178,12 +180,14 @@ export class DashboardService {
 
     for (const rev of revenues) {
       const day = ensure(rev.date);
+      day.revenueId = String(rev._id);
       day.revenue = rev.amount;
       day.revenueAttachments = rev.attachments ?? [];
     }
     for (const mov of movementsResult.items) {
       const day = ensure(mov.date);
       const entry: HistoryEntry = {
+        id: String(mov._id),
         reason: mov.reason,
         category: mov.category,
         amount: mov.amount,

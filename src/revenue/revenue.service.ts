@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Revenue, RevenueDocument } from './schemas/revenue.schema';
 import { UpsertRevenueDto } from './dto/upsert-revenue.dto';
+import { UpdateRevenueDto } from './dto/update-revenue.dto';
 
 @Injectable()
 export class RevenueService {
@@ -25,6 +30,35 @@ export class RevenueService {
 
   findByDate(date: string, unit: string) {
     return this.revenueModel.findOne({ unit, date });
+  }
+
+  async update(id: string, dto: UpdateRevenueDto, unit: string) {
+    const set: Record<string, unknown> = {};
+    if (dto.amount !== undefined) set.amount = dto.amount;
+    if (dto.date !== undefined) set.date = dto.date;
+    if (dto.attachments !== undefined) set.attachments = dto.attachments;
+
+    let updated: RevenueDocument | null;
+    try {
+      updated = await this.revenueModel.findOneAndUpdate(
+        { _id: id, unit },
+        { $set: set },
+        { new: true },
+      );
+    } catch (e) {
+      if ((e as { code?: number }).code === 11000) {
+        throw new BadRequestException('Já existe faturamento nessa data.');
+      }
+      throw e;
+    }
+    if (!updated) throw new NotFoundException('Faturamento não encontrado.');
+    return updated;
+  }
+
+  async remove(id: string, unit: string) {
+    const deleted = await this.revenueModel.findOneAndDelete({ _id: id, unit });
+    if (!deleted) throw new NotFoundException('Faturamento não encontrado.');
+    return { sucesso: true };
   }
 
   /** Faturamentos no intervalo, ordenados por data crescente. */

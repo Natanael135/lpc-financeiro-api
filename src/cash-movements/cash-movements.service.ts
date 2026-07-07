@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -7,6 +7,7 @@ import {
   CashMovementType,
 } from './schemas/cash-movement.schema';
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
+import { UpdateCashMovementDto } from './dto/update-cash-movement.dto';
 import { QueryCashMovementDto } from './dto/query-cash-movement.dto';
 
 export interface DateRange {
@@ -30,6 +31,32 @@ export class CashMovementsService {
 
   create(dto: CreateCashMovementDto, unit: string) {
     return this.cashMovementModel.create({ ...dto, unit });
+  }
+
+  async update(id: string, dto: UpdateCashMovementDto, unit: string) {
+    const set: Record<string, unknown> = {};
+    if (dto.amount !== undefined) set.amount = dto.amount;
+    if (dto.date !== undefined) set.date = dto.date;
+    if (dto.reason !== undefined) set.reason = dto.reason;
+    if (dto.category !== undefined) set.category = dto.category;
+    if (dto.attachments !== undefined) set.attachments = dto.attachments;
+
+    const updated = await this.cashMovementModel.findOneAndUpdate(
+      { _id: id, unit },
+      { $set: set },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('Movimentação não encontrada.');
+    return updated;
+  }
+
+  async remove(id: string, unit: string) {
+    const deleted = await this.cashMovementModel.findOneAndDelete({
+      _id: id,
+      unit,
+    });
+    if (!deleted) throw new NotFoundException('Movimentação não encontrada.');
+    return { sucesso: true };
   }
 
   private applyRange(filter: CashMovementFilter, range?: DateRange) {
