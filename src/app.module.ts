@@ -5,7 +5,6 @@ import { RevenueModule } from './revenue/revenue.module';
 import { CashMovementsModule } from './cash-movements/cash-movements.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { UploadsModule } from './uploads/uploads.module';
-import { PurchasesModule } from './purchases/purchases.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -22,7 +21,6 @@ import { HealthModule } from './health/health.module';
     DashboardModule,
     UploadsModule,
     HealthModule,
-    PurchasesModule,
   ],
 })
 export class AppModule {}
