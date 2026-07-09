@@ -39,6 +39,12 @@ export class UpsertEntryDto {
   overtimeMinutes?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  breakMinutes?: number;
+
+  @IsOptional()
   @IsString()
   note?: string;
 }

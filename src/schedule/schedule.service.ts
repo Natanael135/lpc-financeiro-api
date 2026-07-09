@@ -28,6 +28,9 @@ function minutesOf(time: string): number {
   return h * 60 + m;
 }
 
+// Intervalo padrão (1h) descontado de cada dia de trabalho.
+export const DEFAULT_BREAK_MINUTES = 60;
+
 @Injectable()
 export class ScheduleService {
   constructor(
@@ -91,6 +94,7 @@ export class ScheduleService {
             status: 'work' as const,
             start: employee.defaultStart,
             end: employee.defaultEnd,
+            breakMinutes: DEFAULT_BREAK_MINUTES,
           };
 
       const current = existingByDate.get(date);
@@ -117,7 +121,13 @@ export class ScheduleService {
               $set: { ...desired, source: 'generated' },
               $unset:
                 desired.status === 'dayoff'
-                  ? { start: '', end: '', overtimeMinutes: '', note: '' }
+                  ? {
+                      start: '',
+                      end: '',
+                      overtimeMinutes: '',
+                      breakMinutes: '',
+                      note: '',
+                    }
                   : { overtimeMinutes: '', note: '' },
             },
           },
@@ -148,9 +158,15 @@ export class ScheduleService {
           'Horário de saída deve ser depois do de entrada.',
         );
       }
-    } else if (dto.start || dto.end || dto.overtimeMinutes) {
+      dto.breakMinutes ??= DEFAULT_BREAK_MINUTES;
+      if (minutesOf(dto.end) - minutesOf(dto.start) <= dto.breakMinutes) {
+        throw new BadRequestException(
+          'Intervalo maior que o próprio expediente.',
+        );
+      }
+    } else if (dto.start || dto.end || dto.overtimeMinutes || dto.breakMinutes) {
       throw new BadRequestException(
-        'Horários e extras só valem para dia de trabalho.',
+        'Horários, extras e intervalo só valem para dia de trabalho.',
       );
     }
 
@@ -160,7 +176,13 @@ export class ScheduleService {
       source: 'manual',
     };
     const unset: Record<string, ''> = {};
-    for (const field of ['start', 'end', 'overtimeMinutes', 'note'] as const) {
+    for (const field of [
+      'start',
+      'end',
+      'overtimeMinutes',
+      'breakMinutes',
+      'note',
+    ] as const) {
       if (dto[field] !== undefined) set[field] = dto[field];
       else unset[field] = '';
     }
@@ -216,8 +238,10 @@ export class ScheduleService {
         case 'work': {
           summary.workedDays += 1;
           if (entry.start && entry.end) {
-            summary.totalHours +=
-              (minutesOf(entry.end) - minutesOf(entry.start)) / 60;
+            // Horas líquidas: expediente menos o intervalo (default 1h).
+            const gross = minutesOf(entry.end) - minutesOf(entry.start);
+            const net = gross - (entry.breakMinutes ?? DEFAULT_BREAK_MINUTES);
+            summary.totalHours += Math.max(0, net) / 60;
           }
           summary.overtimeMinutes += entry.overtimeMinutes ?? 0;
           if (dayjs(entry.date).day() === 0) summary.sundaysWorked += 1;

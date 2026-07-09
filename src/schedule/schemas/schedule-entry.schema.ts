@@ -36,6 +36,11 @@ export class ScheduleEntry {
   @Prop({ min: 0 })
   overtimeMinutes?: number;
 
+  // Intervalo (almoço/descanso) em minutos, descontado das horas
+  // trabalhadas sem registrar horário exato. Default 60 (1h).
+  @Prop({ min: 0 })
+  breakMinutes?: number;
+
   // 'manual' preserva o dia em regerações sem overwrite.
   @Prop({ required: true, enum: ['generated', 'manual'], default: 'generated' })
   source: 'generated' | 'manual';
