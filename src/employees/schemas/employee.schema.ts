@@ -26,6 +26,10 @@ export class Employee {
   @Prop({ required: true, min: 0, max: 6 })
   weeklyDayOff: number;
 
+  // Intervalo diário padrão em minutos, descontado das horas trabalhadas.
+  @Prop({ default: 60, min: 0 })
+  defaultBreakMinutes: number;
+
   // Soft delete: preserva o histórico de escala do funcionário.
   @Prop({ default: true, index: true })
   active: boolean;

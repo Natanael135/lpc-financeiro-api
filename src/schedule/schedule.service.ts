@@ -94,7 +94,7 @@ export class ScheduleService {
             status: 'work' as const,
             start: employee.defaultStart,
             end: employee.defaultEnd,
-            breakMinutes: DEFAULT_BREAK_MINUTES,
+            breakMinutes: employee.defaultBreakMinutes ?? DEFAULT_BREAK_MINUTES,
           };
 
       const current = existingByDate.get(date);
@@ -158,7 +158,7 @@ export class ScheduleService {
           'Horário de saída deve ser depois do de entrada.',
         );
       }
-      dto.breakMinutes ??= DEFAULT_BREAK_MINUTES;
+      dto.breakMinutes ??= employee.defaultBreakMinutes ?? DEFAULT_BREAK_MINUTES;
       if (minutesOf(dto.end) - minutesOf(dto.start) <= dto.breakMinutes) {
         throw new BadRequestException(
           'Intervalo maior que o próprio expediente.',
@@ -278,7 +278,10 @@ export class ScheduleService {
     return summary;
   }
 
-  /** sundaysOff: cada data é domingo dentro do período; exatamente 1 por mês com domingo. */
+  /**
+   * sundaysOff é opcional (ex.: funcionário cuja folga fixa já é domingo):
+   * cada data deve ser domingo dentro do período, no máximo 1 por mês.
+   */
   private assertSundaysOff(sundaysOff: string[], start: string, end: string) {
     const byMonth = new Map<string, number>();
     for (const date of sundaysOff) {
@@ -294,21 +297,6 @@ export class ScheduleService {
       if (byMonth.get(month)! > 1) {
         throw new BadRequestException(
           `Mais de um domingo de folga em ${month}.`,
-        );
-      }
-    }
-
-    // Todo mês do período que tenha domingo precisa de exatamente 1 escolhido.
-    for (
-      let day = dayjs(start);
-      !day.isAfter(dayjs(end), 'day');
-      day = day.add(1, 'day')
-    ) {
-      if (day.day() !== 0) continue;
-      const month = day.format('YYYY-MM');
-      if (!byMonth.has(month)) {
-        throw new BadRequestException(
-          `Escolha o domingo de folga de ${month}.`,
         );
       }
     }

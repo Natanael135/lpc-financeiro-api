@@ -1,6 +1,7 @@
 import {
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   Max,
@@ -28,4 +29,10 @@ export class CreateEmployeeDto {
   @Min(0)
   @Max(6)
   weeklyDayOff: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  defaultBreakMinutes?: number;
 }

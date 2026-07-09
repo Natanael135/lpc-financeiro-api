@@ -35,6 +35,12 @@ export class UpdateEmployeeDto {
   weeklyDayOff?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  defaultBreakMinutes?: number;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }
