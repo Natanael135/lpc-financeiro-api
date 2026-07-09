@@ -6,6 +6,10 @@ import { CashMovementsModule } from './cash-movements/cash-movements.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { HealthModule } from './health/health.module';
+import { EmployeesModule } from './employees/employees.module';
+import { HolidaysModule } from './holidays/holidays.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { CalendarEventsModule } from './calendar-events/calendar-events.module';
 
 @Module({
   imports: [
@@ -21,6 +25,10 @@ import { HealthModule } from './health/health.module';
     DashboardModule,
     UploadsModule,
     HealthModule,
+    EmployeesModule,
+    HolidaysModule,
+    ScheduleModule,
+    CalendarEventsModule,
   ],
 })
 export class AppModule {}
