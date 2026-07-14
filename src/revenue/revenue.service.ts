@@ -16,7 +16,9 @@ export class RevenueService {
   ) {}
 
   upsert(dto: UpsertRevenueDto, unit: string) {
-    const update: Record<string, unknown> = { $set: { amount: dto.amount } };
+    // Registros parciais do mesmo dia se acumulam: o valor é somado ao já
+    // lançado, nunca substituído. Para corrigir um valor, use o PATCH /:id.
+    const update: Record<string, unknown> = { $inc: { amount: dto.amount } };
     // Acumula comprovantes/maquinetas ao longo dos registros do mesmo dia.
     if (dto.attachments?.length) {
       update.$push = { attachments: { $each: dto.attachments } };
