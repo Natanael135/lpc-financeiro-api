@@ -14,7 +14,6 @@ import {
   creditedHours,
   DEFAULT_BREAK_MINUTES,
   minutesOf,
-  payrollMonthlyHours,
   resolveWeek,
 } from '../common/week';
 
@@ -28,7 +27,7 @@ export interface ScheduleSummary {
   compDays: number;
   absences: number; // faltas NÃO justificadas
   medicalDays: number; // atestados (falta justificada e paga)
-  payrollHours: number; // horas de folha com DSR embutido (modelo CLT)
+  payrollHours: number; // horas trabalhadas no mês + DSR proporcional (escala real)
   compBalance: number; // acumulado all-time
 }
 
@@ -238,7 +237,7 @@ export class ScheduleService {
       compDays: 0,
       absences: 0,
       medicalDays: 0,
-      payrollHours: payrollMonthlyHours(week),
+      payrollHours: 0, // calculado após o loop (escala real + DSR)
       compBalance: 0,
     };
 
@@ -280,6 +279,34 @@ export class ScheduleService {
       }
     }
     summary.totalHours = Math.round(summary.totalHours * 100) / 100;
+
+    // Horas de folha do mês = horas realmente trabalhadas + DSR (descanso
+    // semanal remunerado) proporcional, calculado sobre a ESCALA REAL do mês
+    // selecionado (varia conforme dias trabalhados, faltas, atestados e o
+    // número de domingos/feriados que o mês tem). Fórmula CLT usual p/ folha:
+    //
+    //   DSR = (horas trabalhadas ÷ dias trabalhados) × (domingos + feriados)
+    //   folha = horas trabalhadas + DSR
+    //
+    // Feriado que cai em domingo não conta duas vezes. Atestado já entra como
+    // dia/hora trabalhada (não derruba o DSR); falta injustificada simplesmente
+    // não soma como dia trabalhado.
+    const daysInMonth = dayjs(monthStart).daysInMonth();
+    let sundays = 0;
+    for (let d = 0; d < daysInMonth; d += 1) {
+      if (dayjs(monthStart).add(d, 'day').day() === 0) sundays += 1;
+    }
+    let holidaysOffSunday = 0;
+    for (const date of holidayDates) {
+      if (dayjs(date).day() !== 0) holidaysOffSunday += 1;
+    }
+    const restDays = sundays + holidaysOffSunday;
+    const dsrHours =
+      summary.workedDays > 0
+        ? (summary.totalHours / summary.workedDays) * restDays
+        : 0;
+    summary.payrollHours =
+      Math.round((summary.totalHours + dsrHours) * 100) / 100;
 
     // Saldo de folgas a receber ACUMULADO até o fim do mês visto (não all-time):
     // feriados trabalhados − compensatórias, ambos só até monthEnd. Assim um
