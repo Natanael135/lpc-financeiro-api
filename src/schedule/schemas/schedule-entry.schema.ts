@@ -8,8 +8,15 @@ export const ENTRY_STATUSES = [
   'dayoff',
   'compday',
   'absence',
+  'medical', // atestado: falta justificada e paga
 ] as const;
 export type EntryStatus = (typeof ENTRY_STATUSES)[number];
+
+export interface EntryAttachment {
+  url: string;
+  filename?: string;
+  kind?: string;
+}
 
 @Schema({ timestamps: true })
 export class ScheduleEntry {
@@ -40,6 +47,10 @@ export class ScheduleEntry {
   // trabalhadas sem registrar horário exato. Default 60 (1h).
   @Prop({ min: 0 })
   breakMinutes?: number;
+
+  // Anexos (ex.: foto do atestado quando status='medical').
+  @Prop({ type: [{ url: String, filename: String, kind: String }], default: undefined })
+  attachments?: EntryAttachment[];
 
   // 'manual' preserva o dia em regerações sem overwrite.
   @Prop({ required: true, enum: ['generated', 'manual'], default: 'generated' })

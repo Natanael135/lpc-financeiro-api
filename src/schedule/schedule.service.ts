@@ -10,26 +10,29 @@ import {
 } from './schemas/schedule-entry.schema';
 import { GenerateScheduleDto } from './dto/generate-schedule.dto';
 import { UpsertEntryDto } from './dto/upsert-entry.dto';
+import {
+  creditedHours,
+  DEFAULT_BREAK_MINUTES,
+  minutesOf,
+  payrollMonthlyHours,
+  resolveWeek,
+} from '../common/week';
 
 export interface ScheduleSummary {
   workedDays: number;
-  totalHours: number; // horas decimais, sem extras
+  totalHours: number; // horas decimais trabalhadas (inclui atestado), sem extras
   overtimeMinutes: number;
   sundaysWorked: number;
   holidaysWorked: number;
   daysOff: number;
   compDays: number;
-  absences: number;
+  absences: number; // faltas NÃO justificadas
+  medicalDays: number; // atestados (falta justificada e paga)
+  payrollHours: number; // horas de folha com DSR embutido (modelo CLT)
   compBalance: number; // acumulado all-time
 }
 
-function minutesOf(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
-}
-
-// Intervalo padrão (1h) descontado de cada dia de trabalho.
-export const DEFAULT_BREAK_MINUTES = 60;
+export { DEFAULT_BREAK_MINUTES };
 
 @Injectable()
 export class ScheduleService {
@@ -67,6 +70,7 @@ export class ScheduleService {
 
     this.assertSundaysOff(dto.sundaysOff, dto.start, dto.end);
     const sundaysOff = new Set(dto.sundaysOff);
+    const week = resolveWeek(employee);
 
     const existing = await this.entryModel.find({
       employeeId: employee._id,
@@ -85,16 +89,16 @@ export class ScheduleService {
       day = day.add(1, 'day')
     ) {
       const date = day.format('YYYY-MM-DD');
-      const isOff =
-        day.day() === employee.weeklyDayOff || sundaysOff.has(date);
+      const journey = week[day.day()];
+      const isOff = journey.off || sundaysOff.has(date);
 
       const desired = isOff
         ? { status: 'dayoff' as const }
         : {
             status: 'work' as const,
-            start: employee.defaultStart,
-            end: employee.defaultEnd,
-            breakMinutes: employee.defaultBreakMinutes ?? DEFAULT_BREAK_MINUTES,
+            start: journey.start,
+            end: journey.end,
+            breakMinutes: journey.breakMinutes,
           };
 
       const current = existingByDate.get(date);
@@ -126,9 +130,10 @@ export class ScheduleService {
                       end: '',
                       overtimeMinutes: '',
                       breakMinutes: '',
+                      attachments: '',
                       note: '',
                     }
-                  : { overtimeMinutes: '', note: '' },
+                  : { overtimeMinutes: '', attachments: '', note: '' },
             },
           },
         });
@@ -181,6 +186,7 @@ export class ScheduleService {
       'end',
       'overtimeMinutes',
       'breakMinutes',
+      'attachments',
       'note',
     ] as const) {
       if (dto[field] !== undefined) set[field] = dto[field];
@@ -210,6 +216,7 @@ export class ScheduleService {
 
     const monthStart = `${month}-01`;
     const monthEnd = dayjs(monthStart).endOf('month').format('YYYY-MM-DD');
+    const week = resolveWeek(employee);
 
     const [entries, monthHolidays, allHolidayDates] = await Promise.all([
       this.entryModel.find({
@@ -230,22 +237,35 @@ export class ScheduleService {
       daysOff: 0,
       compDays: 0,
       absences: 0,
+      medicalDays: 0,
+      payrollHours: payrollMonthlyHours(week),
       compBalance: 0,
     };
 
     for (const entry of entries) {
+      const dow = dayjs(entry.date).day();
       switch (entry.status) {
         case 'work': {
           summary.workedDays += 1;
           if (entry.start && entry.end) {
-            // Horas líquidas: expediente menos o intervalo (default 1h).
+            // Fallback do intervalo: o do dia da semana, não um 60 fixo.
+            const dayBreak = week[dow].off
+              ? DEFAULT_BREAK_MINUTES
+              : week[dow].breakMinutes;
             const gross = minutesOf(entry.end) - minutesOf(entry.start);
-            const net = gross - (entry.breakMinutes ?? DEFAULT_BREAK_MINUTES);
+            const net = gross - (entry.breakMinutes ?? dayBreak);
             summary.totalHours += Math.max(0, net) / 60;
           }
           summary.overtimeMinutes += entry.overtimeMinutes ?? 0;
-          if (dayjs(entry.date).day() === 0) summary.sundaysWorked += 1;
+          if (dow === 0) summary.sundaysWorked += 1;
           if (holidayDates.has(entry.date)) summary.holidaysWorked += 1;
+          break;
+        }
+        case 'medical': {
+          // Atestado: conta como dia trabalhado e paga a jornada padrão do dia.
+          summary.workedDays += 1;
+          summary.medicalDays += 1;
+          summary.totalHours += creditedHours(week, dow);
           break;
         }
         case 'dayoff':
@@ -261,16 +281,20 @@ export class ScheduleService {
     }
     summary.totalHours = Math.round(summary.totalHours * 100) / 100;
 
-    // Saldo de folgas a receber (all-time): feriados trabalhados − compensatórias.
+    // Saldo de folgas a receber ACUMULADO até o fim do mês visto (não all-time):
+    // feriados trabalhados − compensatórias, ambos só até monthEnd. Assim um
+    // feriado de julho não aparece no saldo de janeiro.
+    const holidaysUpToMonth = allHolidayDates.filter((d) => d <= monthEnd);
     const [credits, debits] = await Promise.all([
       this.entryModel.countDocuments({
         employeeId: employee._id,
         status: 'work',
-        date: { $in: allHolidayDates },
+        date: { $in: holidaysUpToMonth },
       }),
       this.entryModel.countDocuments({
         employeeId: employee._id,
         status: 'compday',
+        date: { $lte: monthEnd },
       }),
     ]);
     summary.compBalance = credits - debits;

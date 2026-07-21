@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Post,
   UploadedFile,
@@ -6,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
+
+// Subpastas permitidas dentro do bucket (comprovantes ficam na raiz).
+const ALLOWED_FOLDERS = ['atestados'];
 
 @Controller('uploads')
 export class UploadsController {
@@ -16,8 +21,14 @@ export class UploadsController {
     // Sem storage definido = memória: o arquivo fica em file.buffer.
     FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }),
   )
-  async upload(@UploadedFile() file: Express.Multer.File) {
-    const url = await this.uploadsService.save(file);
+  async upload(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('folder') folder?: string,
+  ) {
+    if (folder && !ALLOWED_FOLDERS.includes(folder)) {
+      throw new BadRequestException('Pasta inválida.');
+    }
+    const url = await this.uploadsService.save(file, folder);
     return {
       url,
       filename: file.originalname,

@@ -9,6 +9,6 @@ export class AttachmentDto {
   filename?: string;
 
   @IsOptional()
-  @IsIn(['comprovante', 'maquineta', 'outro'])
-  kind?: 'comprovante' | 'maquineta' | 'outro';
+  @IsIn(['comprovante', 'maquineta', 'atestado', 'outro'])
+  kind?: 'comprovante' | 'maquineta' | 'atestado' | 'outro';
 }

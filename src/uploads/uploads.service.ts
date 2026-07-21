@@ -41,10 +41,15 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
-  /** Envia o arquivo para o Supabase Storage e devolve a URL pública. */
-  async save(file: Express.Multer.File): Promise<string> {
+  /**
+   * Envia o arquivo para o Supabase Storage e devolve a URL pública.
+   * `folder` opcional guarda em uma subpasta do mesmo bucket (ex.: atestados),
+   * separando de comprovantes (que ficam na raiz).
+   */
+  async save(file: Express.Multer.File, folder?: string): Promise<string> {
     const ext = (file.originalname.split('.').pop() || 'jpg').toLowerCase();
-    const path = `${Date.now()}-${randomUUID()}.${ext}`;
+    const name = `${Date.now()}-${randomUUID()}.${ext}`;
+    const path = folder ? `${folder}/${name}` : name;
 
     const { error } = await this.supabase.storage
       .from(this.bucket)

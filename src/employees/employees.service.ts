@@ -8,6 +8,8 @@ import { Model } from 'mongoose';
 import { Employee, EmployeeDocument } from './schemas/employee.schema';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { DayJourneyDto } from './dto/day-journey.dto';
+import { minutesOf } from '../common/week';
 
 @Injectable()
 export class EmployeesService {
@@ -22,7 +24,7 @@ export class EmployeesService {
   }
 
   create(dto: CreateEmployeeDto, unit: string) {
-    this.assertInterval(dto.defaultStart, dto.defaultEnd);
+    this.assertSchedule(dto.week, dto.defaultStart, dto.defaultEnd);
     return this.employeeModel.create({ ...dto, unit, active: true });
   }
 
@@ -30,9 +32,11 @@ export class EmployeesService {
     const current = await this.employeeModel.findOne({ _id: id, unit });
     if (!current) throw new NotFoundException('Funcionário não encontrado.');
 
+    // Valida a jornada resultante (o que vier no dto, senão o que já existe).
+    const week = dto.week ?? current.week;
     const start = dto.defaultStart ?? current.defaultStart;
     const end = dto.defaultEnd ?? current.defaultEnd;
-    this.assertInterval(start, end);
+    this.assertSchedule(week, start, end);
 
     const updated = await this.employeeModel.findOneAndUpdate(
       { _id: id, unit },
@@ -54,8 +58,40 @@ export class EmployeesService {
     return { sucesso: true };
   }
 
-  private assertInterval(start: string, end: string) {
-    if (end <= start) {
+  /** Valida a jornada por dia da semana ou, na sua falta, a jornada legada. */
+  private assertSchedule(
+    week: DayJourneyDto[] | undefined,
+    legacyStart?: string,
+    legacyEnd?: string,
+  ) {
+    if (week && week.length) {
+      const working = week.filter((d) => !d.off);
+      if (working.length === 0) {
+        throw new BadRequestException(
+          'A jornada precisa de pelo menos um dia de trabalho.',
+        );
+      }
+      for (const d of working) {
+        if (!d.start || !d.end) {
+          throw new BadRequestException(
+            'Dia de trabalho precisa de entrada e saída.',
+          );
+        }
+        if (d.end <= d.start) {
+          throw new BadRequestException(
+            'Horário de saída deve ser depois do de entrada.',
+          );
+        }
+        if (minutesOf(d.end) - minutesOf(d.start) <= (d.breakMinutes ?? 0)) {
+          throw new BadRequestException(
+            'Intervalo maior que o próprio expediente.',
+          );
+        }
+      }
+      return;
+    }
+    // Caminho legado (jornada única).
+    if (legacyStart && legacyEnd && legacyEnd <= legacyStart) {
       throw new BadRequestException(
         'Horário de saída deve ser depois do de entrada.',
       );

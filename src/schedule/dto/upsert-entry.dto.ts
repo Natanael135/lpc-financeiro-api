@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsIn,
   IsInt,
   IsMongoId,
@@ -7,10 +8,13 @@ import {
   Matches,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ENTRY_STATUSES } from '../schemas/schedule-entry.schema';
 import type { EntryStatus } from '../schemas/schedule-entry.schema';
 import { DATE_REGEX } from './generate-schedule.dto';
+import { AttachmentDto } from '../../common/dto/attachment.dto';
 
 export const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -43,6 +47,13 @@ export class UpsertEntryDto {
   @Min(0)
   @Max(240)
   breakMinutes?: number;
+
+  // Anexos (ex.: foto do atestado). Válido para qualquer status.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttachmentDto)
+  attachments?: AttachmentDto[];
 
   @IsOptional()
   @IsString()
