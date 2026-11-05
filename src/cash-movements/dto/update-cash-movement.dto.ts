@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { AttachmentDto } from '../../common/dto/attachment.dto';
+import { UNITS } from '../../common/unit';
 
 export class UpdateCashMovementDto {
   @IsOptional()
@@ -33,4 +35,9 @@ export class UpdateCashMovementDto {
   @ValidateNested({ each: true })
   @Type(() => AttachmentDto)
   attachments?: AttachmentDto[];
+
+  /** Move a sangria/retirada para outra loja. */
+  @IsOptional()
+  @IsIn(UNITS as unknown as string[])
+  unit?: string;
 }

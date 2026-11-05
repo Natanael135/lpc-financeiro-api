@@ -10,6 +10,7 @@ import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { UpdateCashMovementDto } from './dto/update-cash-movement.dto';
 import { QueryCashMovementDto } from './dto/query-cash-movement.dto';
 import { UploadsService } from '../uploads/uploads.service';
+import { normalizeUnit } from '../common/unit';
 
 export interface DateRange {
   start?: string;
@@ -54,6 +55,7 @@ export class CashMovementsService {
     if (dto.reason !== undefined) set.reason = dto.reason;
     if (dto.category !== undefined) set.category = dto.category;
     if (dto.attachments !== undefined) set.attachments = dto.attachments;
+    if (dto.unit !== undefined) set.unit = normalizeUnit(dto.unit);
 
     const updated = await this.cashMovementModel.findOneAndUpdate(
       { _id: id, unit },
@@ -64,7 +66,8 @@ export class CashMovementsService {
     if (
       dto.date !== undefined ||
       dto.category !== undefined ||
-      dto.attachments !== undefined
+      dto.attachments !== undefined ||
+      dto.unit !== undefined
     ) {
       this.organizePhotos(updated);
     }

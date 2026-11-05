@@ -24,6 +24,15 @@ export class Revenue {
   // Comprovantes / fotos das maquinetas do faturamento.
   @Prop({ type: [{ url: String, filename: String, kind: String }], default: [] })
   attachments: Attachment[];
+
+  // Quanto do total veio do balcão e do delivery. Lançamentos antigos não
+  // têm (ou têm só parte): a diferença para `amount` é "sem separação".
+  @Prop({
+    type: { balcao: Number, delivery: Number },
+    _id: false,
+    default: undefined,
+  })
+  channels?: { balcao?: number; delivery?: number };
 }
 
 export const RevenueSchema = SchemaFactory.createForClass(Revenue);

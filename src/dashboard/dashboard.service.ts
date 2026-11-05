@@ -11,6 +11,7 @@ import {
 } from './schemas/cofre-deposit.schema';
 import { CreateCofreDepositDto } from './dto/create-cofre-deposit.dto';
 import { UploadsService } from '../uploads/uploads.service';
+import { Channels, cleanChannels, sumChannels } from '../common/channels';
 
 export interface Attachment {
   url: string;
@@ -31,6 +32,8 @@ export interface HistoryDay {
   revenueId?: string;
   revenue: number;
   revenueAttachments: Attachment[];
+  /** Balcão/delivery (só quando o lançamento foi separado). */
+  revenueChannels?: Channels;
   sangrias: HistoryEntry[];
   retiradas: HistoryEntry[];
   sangriaTotal: number;
@@ -150,6 +153,15 @@ export class DashboardService {
       this.revenueService.listRange(start, end, unit),
     ]);
 
+    // Balcão x delivery no período; o resto é de lançamentos sem separação.
+    const revenueByChannel = { balcao: 0, delivery: 0, semSeparacao: 0 };
+    for (const r of revenues) {
+      const c = cleanChannels(r.channels);
+      revenueByChannel.balcao += c.balcao ?? 0;
+      revenueByChannel.delivery += c.delivery ?? 0;
+      revenueByChannel.semSeparacao += Math.max(r.amount - sumChannels(c), 0);
+    }
+
     return {
       range: { start, end },
       revenueTotal,
@@ -157,6 +169,7 @@ export class DashboardService {
       retiradaTotal, // dinheiro que foi para o cofre no período
       cofreBalance: cofre.balance,
       sangriaByCategory,
+      revenueByChannel,
       revenueSeries: revenues.map((r) => ({ date: r.date, amount: r.amount })),
     };
   }
@@ -191,6 +204,8 @@ export class DashboardService {
       day.revenueId = String(rev._id);
       day.revenue = rev.amount;
       day.revenueAttachments = rev.attachments ?? [];
+      const channels = cleanChannels(rev.channels);
+      if (sumChannels(channels) > 0) day.revenueChannels = channels;
     }
     for (const mov of movementsResult.items) {
       const day = ensure(mov.date);
