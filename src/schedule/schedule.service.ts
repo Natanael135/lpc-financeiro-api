@@ -10,6 +10,7 @@ import {
 } from './schemas/schedule-entry.schema';
 import { GenerateScheduleDto } from './dto/generate-schedule.dto';
 import { UpsertEntryDto } from './dto/upsert-entry.dto';
+import { UploadsService } from '../uploads/uploads.service';
 import {
   creditedHours,
   DEFAULT_BREAK_MINUTES,
@@ -40,6 +41,7 @@ export class ScheduleService {
     private entryModel: Model<ScheduleEntryDocument>,
     @InjectModel(Employee.name) private employeeModel: Model<EmployeeDocument>,
     @InjectModel(Holiday.name) private holidayModel: Model<HolidayDocument>,
+    private readonly uploads: UploadsService,
   ) {}
 
   list(unit: string, start: string, end: string, employeeId?: string) {
@@ -192,11 +194,19 @@ export class ScheduleService {
       else unset[field] = '';
     }
 
-    return this.entryModel.findOneAndUpdate(
+    const saved = await this.entryModel.findOneAndUpdate(
       { employeeId: new Types.ObjectId(dto.employeeId), date: dto.date },
       { $set: set, $unset: unset },
       { new: true, upsert: true },
     );
+    // Foto do atestado: Atestados › loja › mês › dia, com o nome do funcionário.
+    this.uploads.organize(dto.attachments, {
+      category: 'atestado',
+      unit,
+      date: dto.date,
+      label: employee.name,
+    });
+    return saved;
   }
 
   async summary(

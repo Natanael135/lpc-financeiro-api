@@ -8,14 +8,16 @@ import { Model } from 'mongoose';
 import { Revenue, RevenueDocument } from './schemas/revenue.schema';
 import { UpsertRevenueDto } from './dto/upsert-revenue.dto';
 import { UpdateRevenueDto } from './dto/update-revenue.dto';
+import { UploadsService } from '../uploads/uploads.service';
 
 @Injectable()
 export class RevenueService {
   constructor(
     @InjectModel(Revenue.name) private revenueModel: Model<RevenueDocument>,
+    private readonly uploads: UploadsService,
   ) {}
 
-  upsert(dto: UpsertRevenueDto, unit: string) {
+  async upsert(dto: UpsertRevenueDto, unit: string) {
     // Registros parciais do mesmo dia se acumulam: o valor é somado ao já
     // lançado, nunca substituído. Para corrigir um valor, use o PATCH /:id.
     const update: Record<string, unknown> = { $inc: { amount: dto.amount } };
@@ -23,11 +25,17 @@ export class RevenueService {
     if (dto.attachments?.length) {
       update.$push = { attachments: { $each: dto.attachments } };
     }
-    return this.revenueModel.findOneAndUpdate(
+    const saved = await this.revenueModel.findOneAndUpdate(
       { unit, date: dto.date },
       update,
       { new: true, upsert: true },
     );
+    this.uploads.organize(dto.attachments, {
+      category: 'faturamento',
+      unit,
+      date: dto.date,
+    });
+    return saved;
   }
 
   findByDate(date: string, unit: string) {
@@ -54,6 +62,13 @@ export class RevenueService {
       throw e;
     }
     if (!updated) throw new NotFoundException('Faturamento não encontrado.');
+    if (dto.date !== undefined || dto.attachments !== undefined) {
+      this.uploads.organize(updated.attachments, {
+        category: 'faturamento',
+        unit,
+        date: updated.date,
+      });
+    }
     return updated;
   }
 

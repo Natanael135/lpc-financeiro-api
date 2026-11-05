@@ -1,67 +1,90 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
+import { DriveFileStream, DriveStorage } from './drive-storage';
+import {
+  driveIdFromUrl,
+  driveUrl,
+  fileExtension,
+  PhotoContext,
+} from './photo-path';
 
+/**
+ * Fotos (comprovantes, maquinetas, atestados...) ficam no Google Drive da
+ * conta da loja, organizadas por Tipo › Loja › Mês › Dia. No banco guardamos
+ * só a URL relativa `/uploads/drive/<fileId>`, servida pela própria API.
+ */
 @Injectable()
-export class UploadsService implements OnModuleInit {
+export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
-  private readonly supabase: SupabaseClient;
-  private readonly bucket: string;
+  private readonly storage?: DriveStorage;
 
   constructor(config: ConfigService) {
-    const url = config.get<string>('SUPABASE_URL');
-    const key = config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
-    if (!url || !key) {
-      throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios.');
-    }
-    this.bucket = config.get<string>('SUPABASE_BUCKET') || 'comprovantes';
-    this.supabase = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-
-  /** Garante que o bucket existe e é público. */
-  async onModuleInit() {
-    try {
-      const { data } = await this.supabase.storage.getBucket(this.bucket);
-      if (!data) {
-        const { error } = await this.supabase.storage.createBucket(this.bucket, {
-          public: true,
-        });
-        if (error) throw error;
-        this.logger.log(`Bucket "${this.bucket}" criado no Supabase.`);
-      }
-    } catch (e) {
-      this.logger.warn(
-        `Não foi possível verificar/criar o bucket "${this.bucket}": ${
-          (e as Error).message
-        }`,
+    const clientId = config.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = config.get<string>('GOOGLE_CLIENT_SECRET');
+    const refreshToken = config.get<string>('GOOGLE_REFRESH_TOKEN');
+    if (clientId && clientSecret && refreshToken) {
+      this.storage = new DriveStorage({
+        clientId,
+        clientSecret,
+        refreshToken,
+        rootFolderId: config.get<string>('GOOGLE_DRIVE_ROOT_ID'),
+      });
+    } else {
+      // Não derruba a API inteira: só o upload/leitura de fotos fica indisponível.
+      this.logger.error(
+        'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REFRESH_TOKEN são obrigatórios para as fotos.',
       );
     }
   }
 
-  /**
-   * Envia o arquivo para o Supabase Storage e devolve a URL pública.
-   * `folder` opcional guarda em uma subpasta do mesmo bucket (ex.: atestados),
-   * separando de comprovantes (que ficam na raiz).
-   */
-  async save(file: Express.Multer.File, folder?: string): Promise<string> {
-    const ext = (file.originalname.split('.').pop() || 'jpg').toLowerCase();
-    const name = `${Date.now()}-${randomUUID()}.${ext}`;
-    const path = folder ? `${folder}/${name}` : name;
-
-    const { error } = await this.supabase.storage
-      .from(this.bucket)
-      .upload(path, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-    if (error) {
-      throw new Error(`Falha ao enviar para o Supabase: ${error.message}`);
+  private get drive(): DriveStorage {
+    if (!this.storage) {
+      throw new ServiceUnavailableException('Armazenamento de fotos não configurado.');
     }
+    return this.storage;
+  }
 
-    const { data } = this.supabase.storage.from(this.bucket).getPublicUrl(path);
-    return data.publicUrl;
+  /** Envia a foto para o Drive e devolve a URL a guardar no lançamento. */
+  async save(file: Express.Multer.File, ctx?: PhotoContext): Promise<string> {
+    const ext = fileExtension(file.originalname, file.mimetype);
+    const id = await this.drive.uploadPhoto(
+      file.buffer,
+      file.mimetype || 'image/jpeg',
+      ext,
+      ctx,
+    );
+    return driveUrl(id);
+  }
+
+  open(fileId: string): Promise<DriveFileStream> {
+    return this.drive.open(fileId);
+  }
+
+  /**
+   * Depois que um lançamento é salvo/editado, move as fotos dele para a pasta
+   * e nome corretos (cobre APK antigo, rotação de foto e troca de data).
+   * Roda em segundo plano: nunca atrasa nem derruba o salvamento.
+   */
+  organize(attachments: { url?: string }[] | undefined, ctx: PhotoContext): void {
+    if (!this.storage || !attachments?.length) return;
+    const ids = attachments
+      .map((a) => driveIdFromUrl(a.url))
+      .filter((id): id is string => !!id);
+    if (!ids.length) return;
+    void (async () => {
+      for (const id of ids) {
+        try {
+          await this.storage!.place(id, ctx);
+        } catch (e) {
+          this.logger.warn(
+            `Não foi possível organizar a foto ${id}: ${(e as Error).message}`,
+          );
+        }
+      }
+    })();
   }
 }

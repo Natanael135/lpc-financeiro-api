@@ -8,6 +8,7 @@ import {
 } from './schemas/schedule-entry.schema';
 import { EmployeesModule } from '../employees/employees.module';
 import { HolidaysModule } from '../holidays/holidays.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HolidaysModule } from '../holidays/holidays.module';
     ]),
     EmployeesModule,
     HolidaysModule,
+    UploadsModule,
   ],
   controllers: [ScheduleController],
   providers: [ScheduleService],

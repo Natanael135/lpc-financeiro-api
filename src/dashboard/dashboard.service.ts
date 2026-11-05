@@ -10,6 +10,7 @@ import {
   CofreDepositDocument,
 } from './schemas/cofre-deposit.schema';
 import { CreateCofreDepositDto } from './dto/create-cofre-deposit.dto';
+import { UploadsService } from '../uploads/uploads.service';
 
 export interface Attachment {
   url: string;
@@ -45,6 +46,7 @@ export class DashboardService {
     private cofreResetModel: Model<CofreResetDocument>,
     @InjectModel(CofreDeposit.name)
     private cofreDepositModel: Model<CofreDepositDocument>,
+    private readonly uploads: UploadsService,
   ) {}
 
   private async sumResets(unit: string): Promise<number> {
@@ -100,8 +102,14 @@ export class DashboardService {
     return { items, total };
   }
 
-  createDeposit(dto: CreateCofreDepositDto, unit: string) {
-    return this.cofreDepositModel.create({ ...dto, unit });
+  async createDeposit(dto: CreateCofreDepositDto, unit: string) {
+    const created = await this.cofreDepositModel.create({ ...dto, unit });
+    this.uploads.organize(created.attachments, {
+      category: 'cofre',
+      unit,
+      date: created.date,
+    });
+    return created;
   }
 
   /** Aportes ao cofre no período. */

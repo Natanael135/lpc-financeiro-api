@@ -9,6 +9,7 @@ import {
 import { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 import { UpdateCashMovementDto } from './dto/update-cash-movement.dto';
 import { QueryCashMovementDto } from './dto/query-cash-movement.dto';
+import { UploadsService } from '../uploads/uploads.service';
 
 export interface DateRange {
   start?: string;
@@ -27,10 +28,23 @@ export class CashMovementsService {
   constructor(
     @InjectModel(CashMovement.name)
     private cashMovementModel: Model<CashMovementDocument>,
+    private readonly uploads: UploadsService,
   ) {}
 
-  create(dto: CreateCashMovementDto, unit: string) {
-    return this.cashMovementModel.create({ ...dto, unit });
+  /** Organiza as fotos no Drive: Sangria/Retirada › loja › mês › dia. */
+  private organizePhotos(mov: CashMovementDocument) {
+    this.uploads.organize(mov.attachments, {
+      category: mov.type,
+      unit: mov.unit,
+      date: mov.date,
+      label: mov.type === 'sangria' ? mov.category : undefined,
+    });
+  }
+
+  async create(dto: CreateCashMovementDto, unit: string) {
+    const created = await this.cashMovementModel.create({ ...dto, unit });
+    this.organizePhotos(created);
+    return created;
   }
 
   async update(id: string, dto: UpdateCashMovementDto, unit: string) {
@@ -47,6 +61,13 @@ export class CashMovementsService {
       { new: true },
     );
     if (!updated) throw new NotFoundException('Movimentação não encontrada.');
+    if (
+      dto.date !== undefined ||
+      dto.category !== undefined ||
+      dto.attachments !== undefined
+    ) {
+      this.organizePhotos(updated);
+    }
     return updated;
   }
 
